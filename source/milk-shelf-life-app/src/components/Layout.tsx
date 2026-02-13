@@ -1,9 +1,12 @@
 import { Link, useLocation, Outlet } from 'react-router-dom'
-import { Bell, Activity, Plus } from 'lucide-react'
+import { Bell, Activity, Plus, LogOut, User } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/contexts/AuthContext'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 
 export default function Layout() {
+  const { signOut } = useAuth()
   const location = useLocation()
   const [alertCount, setAlertCount] = useState(0)
   const [scrolled, setScrolled] = useState(false)
@@ -54,6 +57,7 @@ export default function Layout() {
     { path: '/qc-charts', label: 'QC Charts' },
     { path: '/alerts', label: 'Alerts' },
     { path: '/analytics', label: 'Analytics' },
+    { path: '/dairy-doctor', label: 'Dairy Doctor' },
     { path: '/vision', label: 'Vision' },
   ]
 
@@ -112,10 +116,42 @@ export default function Layout() {
               )}
             </Link>
 
-            {/* User Avatar */}
-            <div className="h-10 w-10 bg-primary-100 rounded-full flex items-center justify-center">
-              <span className="text-primary-600 text-sm font-medium">DM</span>
-            </div>
+            {/* User Menu */}
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <button className="h-10 w-10 bg-primary-100 rounded-full flex items-center justify-center outline-none focus:ring-2 focus:ring-primary-500 hover:bg-primary-200 transition-colors">
+                  <span className="text-primary-600 text-sm font-medium">DM</span>
+                </button>
+              </DropdownMenu.Trigger>
+
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  className="min-w-[200px] bg-white rounded-lg p-1.5 shadow-lg border border-neutral-200 animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2 z-50 mr-4"
+                  sideOffset={5}
+                  align="end"
+                >
+                  <div className="px-2 py-1.5 text-sm font-medium text-neutral-900 border-b border-neutral-100 mb-1">
+                    My Account
+                  </div>
+                  <DropdownMenu.Item
+                    className="flex items-center gap-2 px-2 py-1.5 text-sm text-neutral-700 hover:text-neutral-900 hover:bg-neutral-100 rounded-md cursor-pointer outline-none transition-colors"
+                    onClick={() => {
+                      // Navigate to profile or settings if implemented
+                    }}
+                  >
+                    <User className="h-4 w-4" />
+                    <span>Profile</span>
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    className="flex items-center gap-2 px-2 py-1.5 text-sm text-critical-600 hover:text-critical-700 hover:bg-critical-50 rounded-md cursor-pointer outline-none transition-colors mt-1"
+                    onClick={signOut}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Log out</span>
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
           </div>
         </div>
       </nav>

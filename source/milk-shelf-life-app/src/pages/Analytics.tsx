@@ -209,6 +209,16 @@ export default function Analytics() {
         </div>
       </section>
 
+      {/* Simulation Disclaimer Banner */}
+      <div className="bg-blue-50 border-y border-blue-200 px-32 py-12">
+        <div className="container mx-auto max-w-7xl flex items-center justify-center gap-2">
+          <span className="text-xl">ℹ️</span>
+          <p className="text-sm font-medium text-blue-800">
+            <strong>SIMULATED DATA MODE:</strong> Historical trends and analytics are visualized using synthetic data based on scientific principles for demonstration purposes.
+          </p>
+        </div>
+      </div>
+
       {/* KPI Summary Cards */}
       <section className="py-64 px-32 bg-background-surface">
         <div className="container mx-auto max-w-7xl">

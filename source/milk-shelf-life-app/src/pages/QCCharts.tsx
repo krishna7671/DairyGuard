@@ -50,55 +50,69 @@ export default function QCCharts() {
     },
     {
       chart_type: 'xbar_control',
-      data_points: Array.from({ length: 20 }, (_, i) => ({
+      data_points: Array.from({ length: 25 }, (_, i) => ({
         sample: i + 1,
-        value: 6.7 + (Math.random() - 0.5) * 0.2, // ph around 6.7
-        ucl: 7.0,
-        lcl: 6.4,
+        value: 6.7 + (Math.random() - 0.5) * 0.15, // Tight control around pH 6.7
+        ucl: 6.9,
+        lcl: 6.5,
         mean: 6.7
       }))
     },
     {
-      chart_type: 'xbar-r', // Ensure we match the ID in chartTypes if possible, or mapping handles it
-      data_points: Array.from({ length: 20 }, (_, i) => ({
+      chart_type: 'xbar-r',
+      data_points: Array.from({ length: 25 }, (_, i) => ({
         sample: i + 1,
-        value: 6.7 + (Math.random() - 0.5) * 0.2,
-        ucl: 7.0,
-        lcl: 6.4,
-        mean: 6.7
+        value: 4.0 + (Math.random() - 0.5) * 0.8, // Temp fluctuation around 4°C
+        range: Math.random() * 0.5,
+        ucl: 5.0,
+        lcl: 3.0,
+        mean: 4.0
       }))
     },
     {
       chart_type: 'histogram',
       data_points: [
         { range: '2.0-2.5', count: 5 },
-        { range: '2.5-3.0', count: 15 },
-        { range: '3.0-3.5', count: 45 },
-        { range: '3.5-4.0', count: 25 },
-        { range: '4.0-4.5', count: 8 },
-        { range: '4.5-5.0', count: 2 }
+        { range: '2.5-3.0', count: 12 },
+        { range: '3.0-3.5', count: 28 },
+        { range: '3.5-4.0', count: 45 }, // Peak at correct temp
+        { range: '4.0-4.5', count: 22 },
+        { range: '4.5-5.0', count: 8 },
+        { range: '5.0+', count: 3 }
       ]
     },
     {
       chart_type: 'scatter',
-      data_points: Array.from({ length: 50 }, () => ({
-        x: 4 + Math.random() * 6,
-        y: 5000 + Math.random() * 45000
+      data_points: Array.from({ length: 50 }, () => {
+        const temp = 3 + Math.random() * 8; // 3 to 11 degrees
+        // Higher temp = Higher bacteria (Exponential relationship)
+        const bacteria = Math.exp(temp / 2) * 500 + (Math.random() * 5000);
+        return { x: parseFloat(temp.toFixed(1)), y: Math.round(bacteria) };
+      })
+    },
+    {
+      chart_type: 'p-chart', // Fixed ID to match chartTypes
+      data_points: Array.from({ length: 20 }, (_, i) => ({
+        sample: i + 1,
+        proportion: 0.02 + (Math.random() * 0.03), // 2-5% defect rate
+        ucl: 0.06,
+        lcl: 0.0,
+        centerLine: 0.035
       }))
     },
     {
       chart_type: 'c-chart',
       data_points: Array.from({ length: 20 }, (_, i) => ({
         sample: i + 1,
-        defects: Math.floor(2 + Math.random() * 4), // 2-6 defects per batch
+        defects: Math.floor(1 + Math.random() * 5), // 1-6 defects per batch
         ucl: 8,
         lcl: 0,
-        centerLine: 4
+        centerLine: 3
       }))
     },
     {
       chart_type: 'fishbone',
-      data_points: [] // Fishbone is static/template based, but we include it for completeness in data check
+      data_points: [{ id: 'template', value: 1 }] // Dummy data to pass empty check
     }
   ]
 
@@ -123,9 +137,13 @@ export default function QCCharts() {
         })
 
         // Map over simulated data structure to ensure we have all types covered
-        // If real data exists for a type, use it; otherwise allow the simulation to stand
+        // If real data exists for a type AND has points, use it; otherwise allow the simulation to stand
         const mergedData = simulated.map(simItem => {
-          return realDataMap.get(simItem.chart_type) || simItem
+          const realItem = realDataMap.get(simItem.chart_type)
+          if (realItem && realItem.data_points && Array.isArray(realItem.data_points) && realItem.data_points.length > 0) {
+            return realItem
+          }
+          return simItem
         })
 
         // Also append any real data types that might not be in our simulated list (if any)
@@ -578,6 +596,16 @@ export default function QCCharts() {
         </div>
       </section>
 
+      {/* Simulation Disclaimer Banner */}
+      <div className="bg-blue-50 border-y border-blue-200 px-32 py-12">
+        <div className="container mx-auto max-w-7xl flex items-center justify-center gap-2">
+          <span className="text-xl">ℹ️</span>
+          <p className="text-sm font-medium text-blue-800">
+            <strong>SIMULATED DATA MODE:</strong> The charts below are visualized using synthetic data based on scientific principles (Arrhenius & Q10 models) for demonstration purposes.
+          </p>
+        </div>
+      </div>
+
       {/* Chart Display Area */}
       <section className="py-64 px-32 bg-background-surface">
         <div className="container mx-auto max-w-7xl">
@@ -603,18 +631,27 @@ export default function QCCharts() {
               <Filter className="h-4 w-4 text-neutral-700" />
               <span className="text-small text-neutral-700">Filter</span>
             </button>
-            <button className="flex items-center gap-2 px-16 py-8 bg-white border border-neutral-200 rounded-md hover:bg-neutral-50 transition-colors">
+            <button
+              onClick={() => alert("Export PDF feature coming in v1.1")}
+              className="flex items-center gap-2 px-16 py-8 bg-white border border-neutral-200 rounded-md hover:bg-neutral-50 transition-colors"
+            >
               <Download className="h-4 w-4 text-neutral-700" />
               <span className="text-small text-neutral-700">Export PDF</span>
             </button>
-            <button className="flex items-center gap-2 px-16 py-8 bg-white border border-neutral-200 rounded-md hover:bg-neutral-50 transition-colors">
+            <button
+              onClick={() => alert("Export CSV feature coming in v1.1")}
+              className="flex items-center gap-2 px-16 py-8 bg-white border border-neutral-200 rounded-md hover:bg-neutral-50 transition-colors"
+            >
               <Download className="h-4 w-4 text-neutral-700" />
               <span className="text-small text-neutral-700">Export CSV</span>
             </button>
           </div>
 
           {/* Chart Canvas */}
-          <div className="bg-white rounded-lg p-48 shadow-card border border-neutral-200">
+          <div className="bg-white rounded-lg p-48 shadow-card border border-neutral-200 relative overflow-hidden">
+            <div className="absolute top-4 right-4 z-10 bg-neutral-100/80 backdrop-blur-sm border border-neutral-200 px-3 py-1 rounded-full pointer-events-none">
+              <span className="text-xs font-mono text-neutral-500 uppercase tracking-wider">Simulated Data</span>
+            </div>
             {renderChart()}
           </div>
         </div>

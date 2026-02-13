@@ -10,9 +10,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // Edge function URLs
+// Edge function URLs
+const FUNCTION_BASE_URL = import.meta.env.VITE_SUPABASE_FUNCTION_URL || 'https://your-project-ref.supabase.co/functions/v1'
+
 export const EDGE_FUNCTIONS = {
-  ML_PREDICTION: 'https://nitfmcinwbdlxcouajkw.supabase.co/functions/v1/ml_prediction',
-  DATA_PROCESSOR: 'https://nitfmcinwbdlxcouajkw.supabase.co/functions/v1/data_processor',
-  QC_CHARTS_GENERATOR: 'https://nitfmcinwbdlxcouajkw.supabase.co/functions/v1/qc_charts_generator',
-  DAIRY_DOCTOR: 'https://nitfmcinwbdlxcouajkw.supabase.co/functions/v1/dairy-doctor',
+  ML_PREDICTION: `${FUNCTION_BASE_URL}/ml_prediction`,
+  DATA_PROCESSOR: `${FUNCTION_BASE_URL}/data_processor`,
+  QC_CHARTS_GENERATOR: `${FUNCTION_BASE_URL}/qc_charts_generator`,
+  DAIRY_DOCTOR: `${FUNCTION_BASE_URL}/dairy-doctor`,
 }

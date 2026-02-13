@@ -11,6 +11,7 @@ import Alerts from './pages/Alerts'
 import Analytics from './pages/Analytics'
 import AddProduct from './pages/AddProduct'
 import Vision from './pages/Vision'
+import DairyDoctor from './pages/DairyDoctor'
 import './index.css'
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
               <Route path="/alerts" element={<Alerts />} />
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/add-product" element={<AddProduct />} />
+              <Route path="/dairy-doctor" element={<DairyDoctor />} />
               <Route path="/vision" element={<Vision />} />
             </Route>
           </Route>

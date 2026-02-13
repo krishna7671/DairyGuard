@@ -13,7 +13,7 @@ serve(async (req) => {
     }
 
     try {
-        const { ph, temperature, bacteriaCount, predictedShelfLifeHours } = await req.json()
+        const { ph, temperature, bacteriaCount, predictedShelfLifeHours, userQuery } = await req.json()
 
         const openAiKey = Deno.env.get('OPENAI_API_KEY')
         if (!openAiKey) {
@@ -21,8 +21,9 @@ serve(async (req) => {
         }
 
         const systemPrompt = `You are "Dairy Doctor", an expert AI food technologist for the Dairy Guard app. 
-    Analyze the provided milk sensor data and give a concise, actionable recommendation in 2 sentences.
-    Focus on safety, immediate actions (e.g., "Boil now"), and product suitability (e.g., "Good for Paneer").
+    Analyze the provided milk sensor data and answer the user's question concisely.
+    If no specific question is asked, give a general safety assessment in 2 sentences.
+    Focus on safety, immediate actions (e.g., "Boil now"), and product suitability.
     
     Context:
     - Safe pH: 6.6-6.8
@@ -35,9 +36,9 @@ serve(async (req) => {
       - pH: ${ph}
       - Temperature: ${temperature}°C
       - Bacteria Count: ${bacteriaCount} CFU/ml
-      - Predicted Shelf Life: ${predictedShelfLifeHours.toFixed(1)} hours
+      - Predicted Shelf Life: ${predictedShelfLifeHours ? predictedShelfLifeHours.toFixed(1) : 'Unknown'} hours
       
-      What is your expert advice?
+      User Question: "${userQuery || 'Please analyze this milk quality.'}"
     `
 
         const response = await fetch('https://api.openai.com/v1/chat/completions', {

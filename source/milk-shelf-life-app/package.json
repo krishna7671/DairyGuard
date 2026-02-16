@@ -5,12 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "pnpm install --prefer-offline && rm -rf node_modules/.vite-temp && vite build",
-    "build:prod": "pnpm install --prefer-offline && rm -rf node_modules/.vite-temp && BUILD_MODE=prod vite build",
-    "lint": "pnpm install --prefer-offline && eslint .",
-    "preview": "pnpm install --prefer-offline && vite preview",
-    "install-deps": "pnpm install --prefer-offline",
-    "clean": "rm -rf node_modules .pnpm-store pnpm-lock.yaml && pnpm store prune"
+    "build": "npm install && vite build",
+    "build:prod": "npm install && set BUILD_MODE=prod && vite build",
+    "lint": "npm install && eslint .",
+    "preview": "npm install && vite preview",
+    "install-deps": "npm install",
+    "clean": "rd /s /q node_modules"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

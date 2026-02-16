@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { Thermometer, Droplets, Activity, Wifi, Clock, CloudRain, Database, RefreshCw, Cpu, BrainCircuit } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -25,22 +25,8 @@ export default function Sensors() {
 
   const SIMULATION_INTERVAL = 5000 // 5 seconds
 
-  useEffect(() => {
-    // Initial fetch
-    const initialData = generateSimulatedData(0)
-    setData(initialData)
-    setHistory([initialData])
 
-    const interval = setInterval(() => {
-      if (isSimulating) {
-        simulateNewReading()
-      }
-    }, SIMULATION_INTERVAL)
-
-    return () => clearInterval(interval)
-  }, [isSimulating])
-
-  const generateSimulatedData = (prevStorageTime: number): SensorData => {
+  const generateSimulatedData = useCallback((prevStorageTime: number): SensorData => {
     // Increment storage time
     const newStorageTime = prevStorageTime + 1
     storageTimeRef.current = newStorageTime
@@ -95,9 +81,9 @@ export default function Sensors() {
       risk_level: riskLevel,
       timestamp: new Date().toISOString()
     }
-  }
+  }, [])
 
-  const simulateNewReading = async () => {
+  const simulateNewReading = useCallback(async () => {
     const newData = generateSimulatedData(storageTimeRef.current)
 
     // Update State
@@ -121,7 +107,22 @@ export default function Sensors() {
     } catch (err) {
       console.error('Simulation Error:', err)
     }
-  }
+  }, [batchId, generateSimulatedData])
+
+  useEffect(() => {
+    // Initial fetch
+    const initialData = generateSimulatedData(0)
+    setData(initialData)
+    setHistory([initialData])
+
+    const interval = setInterval(() => {
+      if (isSimulating) {
+        simulateNewReading()
+      }
+    }, SIMULATION_INTERVAL)
+
+    return () => clearInterval(interval)
+  }, [isSimulating, simulateNewReading, generateSimulatedData])
 
   // Helper for status colors
   const getStatusColor = (value: number, type: 'temp' | 'ph' | 'bacteria') => {
@@ -220,8 +221,8 @@ export default function Sensors() {
             </div>
             <div className="mt-8 flex items-center gap-2">
               <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${data.risk_level === 'Low' ? 'bg-success-100 text-success-700' :
-                  data.risk_level === 'Moderate' ? 'bg-warning-100 text-warning-700' :
-                    'bg-critical-100 text-critical-700'
+                data.risk_level === 'Moderate' ? 'bg-warning-100 text-warning-700' :
+                  'bg-critical-100 text-critical-700'
                 }`}>
                 Risk: {data.risk_level}
               </span>

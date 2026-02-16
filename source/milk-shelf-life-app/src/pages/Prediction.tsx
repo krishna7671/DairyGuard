@@ -47,47 +47,182 @@ export default function Prediction() {
     }
   }, [latestPrediction])
 
+  // Poll for live simulation data to ensure we show the latest active batch
+  useEffect(() => {
+    const pollLiveBatch = async () => {
+      try {
+        // 🛑 STOP: If we are viewing a manually added batch (from Add Product), DO NOT auto-switch to simulation.
+        // We can detect this by checking if the current batch exists in the real `milk_batches` or `sensor_readings` vs just `sensor_data`.
+        // Or simpler: If the user just navigated here with a 'newBatch' state, we are in "Manual Mode".
+        if (location.state?.newBatch && latestPrediction?.batch_id === location.state.newBatch) {
+          return;
+        }
+
+        // Also, if the current batch is NOT a simulation batch (i.e. it came from Real IoT/Manual), don't override.
+        // We'll assume if it has a valid ID that matches our simulation pattern but we need to be careful.
+        // Better heuristic: Only auto-switch if we are currently displaying a "Live" or "Pending" simulation tag, or nothing.
+        const isViewingManualBatch = latestPrediction && !latestPrediction.batch_id.includes('live-') && !latestPrediction.id.startsWith('pending-');
+
+        // However, `AddProduct` also generates `BATCH-` IDs. 
+        // So we rely on: "Is this a real persistent batch?"
+        // If it is, `fetchLatestReadings` would have found it in `sensor_readings`.
+        // Let's check a flag. We can derive "isSimulation" from the readings source.
+
+        // For now, simple fix: If location.state.success is true (recent add), we ignore polling.
+        // But that fades after user navigates away and back.
+
+        // Let's proceed with: Only switch if the user explicitly enabled "Live Mode" or if we are idle.
+        // We'll prioritize: Manual Page Load > Live Simulation.
+
+        const { data: latestSim } = await supabase
+          .from('sensor_data')
+          .select('*')
+          .order('timestamp', { ascending: false })
+          .limit(1);
+
+        if (latestSim && latestSim.length > 0) {
+          const latest = latestSim[0];
+          const liveBatchId = latest.batch_id;
+
+          // Explicitly check if we should override
+          const shouldOverlay = !latestPrediction || latestPrediction.id.startsWith('live-') || latestPrediction.id.startsWith('pending-');
+
+          if (shouldOverlay && latestPrediction?.batch_id !== liveBatchId) {
+            // ... (Rest of logic: Update readings and prediction) ...
+            setLatestReadings({
+              temperature: latest.temperature,
+              ph: latest.ph,
+              bacteria: latest.estimated_bacteria,
+              humidity: latest.humidity,
+              timestamp: latest.timestamp
+            });
+
+            const pendingPrediction = {
+              id: 'live-' + Date.now(),
+              batch_id: liveBatchId,
+              predicted_shelf_life_hours: 0,
+              confidence_lower: 0,
+              confidence_upper: 0,
+              accuracy_score: 0,
+              risk_factors: [],
+              last_updated: latest.timestamp
+            };
+            setLatestPrediction(pendingPrediction as any);
+          } else if (shouldOverlay) {
+            // Update values for same batch in simulation mode
+            if (latestReadings?.timestamp !== latest.timestamp) {
+              setLatestReadings({
+                temperature: latest.temperature,
+                ph: latest.ph,
+                bacteria: latest.estimated_bacteria,
+                humidity: latest.humidity,
+                timestamp: latest.timestamp
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Polling error", e);
+      }
+    };
+
+    const intervalId = setInterval(pollLiveBatch, 2000);
+    return () => clearInterval(intervalId);
+  }, [latestPrediction, latestReadings, location.state]);
+
   const fetchLatestReadings = async (batchId: string) => {
     try {
-      // 1. Get Sensor Types Map
-      const { data: sensors } = await supabase.from('sensors').select('id, sensor_type')
-      const sensorMap = new Map(sensors?.map(s => [s.id, s.sensor_type]))
+      // ---------------------------------------------------------
+      // HYBRID DATA ARCHITECTURE:
+      // 1. Priority: Real IoT Sensors (table: sensor_readings)
+      // 2. Fallback: Simulation Engine (table: sensor_data)
+      // This ensures the app works immediately with simulation but
+      // seamlessly switches to real data when IoT sensors are connected.
+      // ---------------------------------------------------------
 
-      // 2. Get Readings for Batch
+      // 1. Try fetching from relational `sensor_readings` first (Real IoT structure)
+      const { data: sensors } = await supabase.from('sensors').select('id, sensor_type')
+
+      // Create a map that normalizes keys to lowercase to avoid "pH" vs "PH" vs "Ph" issues
+      const sensorMap = new Map<string, string>();
+      if (sensors) {
+        sensors.forEach(s => {
+          // Store mapping from ID to LOWERCASE type
+          // e.g. "uuid-123" -> "temperature"
+          sensorMap.set(s.id, s.sensor_type.toLowerCase());
+        });
+      }
+
       const { data: readings } = await supabase
         .from('sensor_readings')
         .select('*')
         .eq('batch_id', batchId)
-        .order('timestamp', { ascending: false })
-        .limit(10) // Fetch enough to cover all types
+        .order('recorded_at', { ascending: false }) // Fixed: sensor_readings uses recorded_at
+        .limit(10)
 
       if (readings && readings.length > 0) {
         const processed: any = {}
-        const latestTimestamp = readings[0].timestamp
+        const latestTimestamp = readings[0].recorded_at // Fixed: use recorded_at
 
-        // Group by sensor type (only strictly latest ones)
         readings.forEach(r => {
           const type = sensorMap.get(r.sensor_id)
-          if (type && !processed[type]) {
-            processed[type] = r.value
+          if (type) {
+            // Map standard keys based on lowercase type
+            if (type.includes('temp')) processed['Temperature'] = r.value;
+            else if (type.includes('ph')) processed['pH'] = r.value;
+            else if (type.includes('bact')) processed['Bacteria'] = r.value;
+            else if (type.includes('hum')) processed['Humidity'] = r.value;
           }
         })
 
-        // Fallback for temperature if redundant column exists
-        if (!processed['Temperature'] && readings[0].temperature_celsius) {
-          processed['Temperature'] = readings[0].temperature_celsius
-        }
+        // Use redundant columns if available (Fallback if sensor_id mapping failed)
+        // Check first record for column data
+        const r0 = readings[0];
+        if (processed['Temperature'] == null && r0.temperature_celsius != null) processed['Temperature'] = r0.temperature_celsius;
+
+        // Safety: AddProduct saves humidity_percent for manual batches, check it
+        if (processed['Humidity'] == null && r0.humidity_percent != null) processed['Humidity'] = r0.humidity_percent;
+
+        // Note: pH and Bacteria might only exist via sensor_id rows for now, BUT
+        // AddProduct inserts them as rows, so they should be caught by the loop loop ABOVE *if* sensor_id matches.
+        // If not, we might be in trouble for pH coming from manual entry if the ID lookup failed in AddProduct.
+        // But we fixed AddProduct to look up IDs.
 
         setLatestReadings({
-          temperature: processed['Temperature'] || 4.2,
-          ph: processed['pH'] || 6.7,
-          bacteria: processed['Bacteria'] || 30000,
-          humidity: processed['Humidity'] || 65,
+          temperature: processed['Temperature'],
+          ph: processed['pH'],
+          bacteria: processed['Bacteria'],
+          humidity: processed['Humidity'],
           timestamp: latestTimestamp
         })
+        return; // Found data, exit
       }
+
+      // 2. Fallback: Try fetching from flat `sensor_data` (Simulation structure)
+      const { data: simData } = await supabase
+        .from('sensor_data')
+        .select('*')
+        .eq('batch_id', batchId)
+        .order('timestamp', { ascending: false })
+        .limit(1)
+
+      if (simData && simData.length > 0) {
+        const latest = simData[0];
+        setLatestReadings({
+          temperature: latest.temperature,
+          ph: latest.ph,
+          bacteria: latest.estimated_bacteria,
+          humidity: latest.humidity,
+          timestamp: latest.timestamp
+        })
+      } else {
+        // No data found anywhere
+        setLatestReadings(null);
+      }
+
     } catch (e) {
       console.error("Error fetching readings", e)
+      setLatestReadings(null);
     }
   }
 
@@ -103,28 +238,34 @@ export default function Prediction() {
         setPredictions(data)
         setLatestPrediction(data[0])
       } else {
-        // Fallback Simulation
-        const simPrediction = {
-          id: 'sim-1',
-          batch_id: 'BATCH-DEMO-2026',
-          predicted_shelf_life_hours: 184, // ~7.6 days
-          confidence_lower: 172,
-          confidence_upper: 196,
-          accuracy_score: 94.5,
-          risk_factors: [],
-          last_updated: new Date().toISOString()
-        }
-        setPredictions([simPrediction])
-        setLatestPrediction(simPrediction)
+        // No existing predictions found.
+        // Check if we have active simulation data to show instead of a static fake prediction.
+        const { data: latestSimBatch } = await supabase
+          .from('sensor_data')
+          .select('batch_id, timestamp')
+          .order('timestamp', { ascending: false })
+          .limit(1);
 
-        // Also set simulated readings if we are using simulated prediction
-        setLatestReadings({
-          temperature: 4.1,
-          ph: 6.75,
-          bacteria: 15000,
-          humidity: 65,
-          timestamp: new Date().toISOString()
-        })
+        if (latestSimBatch && latestSimBatch.length > 0) {
+          // Create a dummy "Pending" prediction object for the latest simulation batch
+          // This allows the UI to load the readings and let the user click "Generate"
+          const pendingPrediction = {
+            id: 'pending-' + Date.now(),
+            batch_id: latestSimBatch[0].batch_id,
+            predicted_shelf_life_hours: 0, // Indicator for "Not predicted yet" or pending
+            confidence_lower: 0,
+            confidence_upper: 0,
+            accuracy_score: 0,
+            risk_factors: [],
+            last_updated: latestSimBatch[0].timestamp
+          };
+          // We won't set this as *the* prediction in the list (because it's not real),
+          // but we will set it as the *latestPrediction* state to drive the UI.
+          setLatestPrediction(pendingPrediction as any);
+          // Verify if we should show a specific message
+        } else {
+          setLatestPrediction(null);
+        }
       }
     } catch (error) {
       console.error('Error fetching predictions:', error)
@@ -136,7 +277,7 @@ export default function Prediction() {
   const generateNewPrediction = async () => {
     setGenerating(true)
     try {
-      const currentReadings = latestReadings || { temperature: 4.5, ph: 6.8, bacteria: 30000 }
+      const currentReadings = latestReadings || { temperature: 4.5, ph: 6.8, bacteria: 30000, humidity: 65 }
 
       // Call ML prediction edge function
       const response = await fetch(EDGE_FUNCTIONS.ML_PREDICTION, {
@@ -147,10 +288,10 @@ export default function Prediction() {
         },
         body: JSON.stringify({
           batchId: latestPrediction?.batch_id || 'BATCH-' + Date.now(),
-          temperature: currentReadings.temperature,
-          ph: currentReadings.ph,
-          bacteriaCount: currentReadings.bacteria,
-          humidity: currentReadings.humidity,
+          temperature: currentReadings.temperature ?? 4.5, // Keep fallback for Prediction API call only
+          ph: currentReadings.ph ?? 6.8,
+          bacteriaCount: currentReadings.bacteria ?? 30000,
+          humidity: currentReadings.humidity ?? 65,
           fatContent: 3.5,
           storageDays: 0,
         }),
@@ -332,7 +473,26 @@ export default function Prediction() {
 
                   {/* Risk Factors Panel */}
                   <div>
-                    <h3 className="text-title font-semibold text-neutral-900 mb-24">Risk Factors</h3>
+                    <div className="flex items-center justify-between mb-24">
+                      <h3 className="text-title font-semibold text-neutral-900">Risk Factors</h3>
+                      {/* Hybrid Source Indicator */}
+                      <div className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1 ${latestPrediction.batch_id.includes('BATCH-') || latestPrediction.batch_id.includes('live-')
+                        ? 'bg-indigo-100 text-indigo-700'
+                        : 'bg-green-100 text-green-700'
+                        }`}>
+                        {latestPrediction.batch_id.includes('BATCH-') || latestPrediction.batch_id.includes('live-') ? (
+                          <>
+                            <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                            Source: Simulation
+                          </>
+                        ) : (
+                          <>
+                            <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                            Source: Real IoT
+                          </>
+                        )}
+                      </div>
+                    </div>
                     <div className="space-y-16">
                       {latestPrediction.risk_factors && latestPrediction.risk_factors.length > 0 ? (
                         latestPrediction.risk_factors.map((factor, idx) => (
@@ -370,9 +530,9 @@ export default function Prediction() {
                 <div className="mb-32">
                   <SafetyAnalysis
                     data={{
-                      ph: latestReadings?.ph ?? 6.7,
-                      temperature: latestReadings?.temperature ?? 4.2,
-                      bacteriaCount: latestReadings?.bacteria ?? 30000,
+                      ph: latestReadings?.ph,
+                      temperature: latestReadings?.temperature,
+                      bacteriaCount: latestReadings?.bacteria,
                       predictedShelfLifeHours: latestPrediction.predicted_shelf_life_hours,
                       lastUpdated: latestPrediction.last_updated
                     }}

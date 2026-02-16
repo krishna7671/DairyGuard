@@ -104,11 +104,16 @@ export default function AddProduct() {
         .from('sensors')
         .select('id, sensor_type')
 
+      // Robust case-insensitive lookup
+      const findSensorId = (type: string) => {
+        return sensors?.find(s => s.sensor_type.toLowerCase() === type.toLowerCase())?.id || null;
+      };
+
       const sensorIds: SensorIDs = {
-        temperature: sensors?.find(s => s.sensor_type === 'Temperature')?.id || null,
-        ph: sensors?.find(s => s.sensor_type === 'pH')?.id || null,
-        bacteria: sensors?.find(s => s.sensor_type === 'Bacteria')?.id || null,
-        humidity: sensors?.find(s => s.sensor_type === 'Humidity')?.id || null
+        temperature: findSensorId('Temperature'),
+        ph: findSensorId('pH'),
+        bacteria: findSensorId('Bacteria'),
+        humidity: findSensorId('Humidity')
       }
 
       // Insert sensor readings if provided
@@ -207,7 +212,7 @@ export default function AddProduct() {
       const { error: predictionError } = await supabase
         .from('shelf_life_predictions')
         .insert({
-          batch_id: batchData.id,
+          batch_id: batchId, // Use the string ID (BATCH-XXX), not the UUID (batchData.id)
           predicted_shelf_life_hours: prediction.predictedShelfLifeHours,
           confidence_lower: prediction.confidenceLower,
           confidence_upper: prediction.confidenceUpper,

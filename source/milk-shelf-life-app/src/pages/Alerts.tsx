@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { AlertTriangle, CheckCircle, Info, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -20,27 +20,8 @@ export default function Alerts() {
   const [filter, setFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all')
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchAlerts()
 
-    // Subscribe to real-time alerts
-    const channel = supabase
-      .channel('alerts-realtime')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'alerts'
-      }, () => {
-        fetchAlerts()
-      })
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [filter])
-
-  const fetchAlerts = async () => {
+  const fetchAlerts = useCallback(async () => {
     try {
       let query = supabase
         .from('alerts')
@@ -130,7 +111,27 @@ export default function Alerts() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filter])
+
+  useEffect(() => {
+    fetchAlerts()
+
+    // Subscribe to real-time alerts
+    const channel = supabase
+      .channel('alerts-realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'alerts'
+      }, () => {
+        fetchAlerts()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [filter, fetchAlerts])
 
   const resolveAlert = async (alertId: string) => {
     try {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Download, Filter } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
@@ -32,12 +32,9 @@ export default function QCCharts() {
   const [qcData, setQcData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchQCData()
-  }, [])
 
   // Define simulated data outside useEffect to use for merging
-  const getSimulatedData = () => [
+  const getSimulatedData = useCallback(() => [
     {
       chart_type: 'pareto',
       data_points: [
@@ -52,9 +49,9 @@ export default function QCCharts() {
       chart_type: 'xbar_control',
       data_points: Array.from({ length: 25 }, (_, i) => ({
         sample: i + 1,
-        value: 6.7 + (Math.random() - 0.5) * 0.15, // Tight control around pH 6.7
-        ucl: 6.9,
-        lcl: 6.5,
+        value: 6.7 + (Math.random() - 0.5) * 2.0, // Wider pH fluctuation (5.7 - 7.7 common)
+        ucl: 8.5,
+        lcl: 3.0,
         mean: 6.7
       }))
     },
@@ -62,31 +59,31 @@ export default function QCCharts() {
       chart_type: 'xbar-r',
       data_points: Array.from({ length: 25 }, (_, i) => ({
         sample: i + 1,
-        value: 4.0 + (Math.random() - 0.5) * 0.8, // Temp fluctuation around 4°C
-        range: Math.random() * 0.5,
-        ucl: 5.0,
-        lcl: 3.0,
-        mean: 4.0
+        value: 4.0 + (Math.random() > 0.8 ? Math.random() * 40 : Math.random() * 2), // Occasional spikes to 44C
+        range: Math.random() * 5,
+        ucl: 50.0,
+        lcl: 0.0,
+        mean: 8.5 // Higher mean due to spikes
       }))
     },
     {
       chart_type: 'histogram',
       data_points: [
-        { range: '2.0-2.5', count: 5 },
-        { range: '2.5-3.0', count: 12 },
-        { range: '3.0-3.5', count: 28 },
-        { range: '3.5-4.0', count: 45 }, // Peak at correct temp
-        { range: '4.0-4.5', count: 22 },
-        { range: '4.5-5.0', count: 8 },
-        { range: '5.0+', count: 3 }
+        { range: '0-5°C', count: 45 },
+        { range: '5-15°C', count: 15 },
+        { range: '15-30°C', count: 8 },
+        { range: '30-45°C', count: 5 }, // Heat abuse
+        { range: '45-50°C', count: 2 }  // Extreme abuse
       ]
     },
     {
       chart_type: 'scatter',
       data_points: Array.from({ length: 50 }, () => {
-        const temp = 3 + Math.random() * 8; // 3 to 11 degrees
-        // Higher temp = Higher bacteria (Exponential relationship)
-        const bacteria = Math.exp(temp / 2) * 500 + (Math.random() * 5000);
+        const temp = Math.random() * 50; // 0 to 50 degrees
+        // Accurate prediction: Higher temp = Exponentially higher bacteria
+        // log(Bacteria) ~ k * Temp
+        const logBacteria = 3 + (temp / 10); // Base 10^3 (1000) -> at 50C -> 10^8 (100M)
+        const bacteria = Math.pow(10, logBacteria) + (Math.random() * 1000);
         return { x: parseFloat(temp.toFixed(1)), y: Math.round(bacteria) };
       })
     },
@@ -114,9 +111,9 @@ export default function QCCharts() {
       chart_type: 'fishbone',
       data_points: [{ id: 'template', value: 1 }] // Dummy data to pass empty check
     }
-  ]
+  ], [])
 
-  const fetchQCData = async () => {
+  const fetchQCData = useCallback(async () => {
     try {
       const { data } = await supabase
         .from('qc_charts_data')
@@ -159,7 +156,11 @@ export default function QCCharts() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [getSimulatedData])
+
+  useEffect(() => {
+    fetchQCData()
+  }, [fetchQCData])
 
   // Removed generateSimulatedQCData as it is now getSimulatedData inside component scope or hoisted
 

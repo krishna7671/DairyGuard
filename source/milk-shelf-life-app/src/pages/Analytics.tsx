@@ -108,7 +108,7 @@ export default function Analytics() {
       // Process Batch Comparison (Group by Milk Type)
       const batchMap = new Map<string, { sum: number, count: number }>()
       predictions?.forEach(p => {
-        // @ts-ignore - Supabase types might not know about the join yet
+        // @ts-expect-error - Supabase types might not know about the join yet
         const type = p.milk_batches?.milk_type || 'Unknown'
         const current = batchMap.get(type) || { sum: 0, count: 0 }
         batchMap.set(type, {
@@ -129,7 +129,7 @@ export default function Analytics() {
         const day = new Date(r.timestamp).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
         const current = driftMap.get(day) || { tempSum: 0, tempCount: 0, phSum: 0, phCount: 0, bactSum: 0, bactCount: 0 }
 
-        // @ts-ignore
+        // @ts-expect-error - Recharts type definition issue with label
         const type = r.sensors?.sensor_type
 
         if (type === 'Temperature') { current.tempSum += r.value; current.tempCount++ }
